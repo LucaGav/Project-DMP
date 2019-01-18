@@ -1,0 +1,254 @@
+//CODE FOR SLAVE
+
+#include <LiquidCrystal.h>
+// include I2C library
+#include <Wire.h>
+#include <Servo.h>
+// Pinii motor 1
+#define mpin00 5
+#define mpin01 6
+// Pinii motor 2
+#define mpin10 3
+#define mpin11 11
+const int trigPin = 9;
+const int echoPin = 10;
+long duration;
+int distance;
+Servo srv;
+int degree_zero = 110;
+int x = 0;
+int ok = 0;
+int accel = 128;
+
+LiquidCrystal lcd(7, 6, 5, 4, 3, 2);
+void setup() {
+ // Start i2C slave at address 9
+ Wire.begin(9);
+ // attach a function to be called when we receive something on the I2C bus
+ Wire.onReceive(receiveEvent);
+ pinMode(trigPin, OUTPUT); // Sets the trigPin as an Output
+  pinMode(echoPin, INPUT); // Sets the echoPin as an Input
+  // configurarea pinilor motor ca iesire, initial valoare 0
+  Serial.begin(9600);
+  digitalWrite(mpin00, 0);
+  digitalWrite(mpin01, 0);
+  digitalWrite(mpin10, 0);
+  digitalWrite(mpin11, 0);
+  pinMode (mpin00, OUTPUT);
+  pinMode (mpin01, OUTPUT);
+  pinMode (mpin10, OUTPUT);
+  pinMode (mpin11, OUTPUT);
+  // pin LED
+  pinMode(13, OUTPUT);
+
+}
+void StartMotor (int m1, int m2, int forward, int speed)
+{
+
+ if (speed==0) // stop
+ {
+ digitalWrite(m1, 0); 
+ digitalWrite(m2, 0);
+ }
+ else
+ {
+ if (forward)
+ {
+ digitalWrite(m2, 0);
+ analogWrite (m1, speed); // use PWM
+ }
+ else
+ {
+ digitalWrite(m1, 0);
+ analogWrite(m2, speed);
+ }
+ }
+}
+void delayStopped(int ms)
+{
+ StartMotor (mpin00, mpin01, 0, 0);
+ StartMotor (mpin10, mpin11, 0, 0);
+ delay(ms);
+}
+void receiveEvent(int bytes) {
+ x = Wire.read(); //read I2C received character
+  if(x==1) {
+    ok = 1;
+  }
+  if(x==2) {
+    ok = 0;
+  }
+  if(x==3){
+    ok = 2;
+  }
+  if(x==4){
+    ok = 3;
+  }
+  if(x==5){
+    ok = 4;
+  }
+  if(x==6){
+    ok = 5;
+  }
+  if(x==7){
+    ok = 6;
+  }
+  if(x==8){
+    ok = 7;
+  }
+}
+void loop() {
+  if (ok == 0){
+      StartMotor (mpin00, mpin01, 1, 128);
+      StartMotor (mpin10, mpin11, 1, 128);
+
+  }
+  if (ok == 1){
+     StartMotor (mpin00, mpin01, 0, 128);
+      StartMotor (mpin10, mpin11, 0, 128);
+      
+  }
+  if (ok == 2){
+     StartMotor (mpin00, mpin01, 0, 0);
+      StartMotor (mpin10, mpin11, 0, 0);
+  }
+  if ( ok==3){
+    StartMotor (mpin00, mpin01, 1, 128);
+      StartMotor (mpin10, mpin11, 0, 128);
+  }
+  if (ok ==4){
+    StartMotor (mpin00, mpin01, 0, 128);
+      StartMotor (mpin10, mpin11, 1, 128);
+  }
+  if(ok == 5){
+    StartMotor (mpin00, mpin01, 0, accel);
+     StartMotor (mpin10, mpin11, 0, accel);
+     accel = accel + 25;
+  }
+  if(ok == 6){
+    StartMotor (mpin00, mpin01, 0, accel);
+     StartMotor (mpin10, mpin11, 0, accel);
+     accel = accel - 25;
+  }
+  if(ok == 7){
+     playWithServo(9); 
+  }
+}
+void playWithServo(int pin){
+ srv.attach(pin);
+ srv.write(0);
+ delay(1000);
+ srv.write(180);
+ delay(1000);
+ srv.write(90);
+ delay(1000);
+ srv.detach();
+} 
+
+//CODE FOR MASTER
+#include <LiquidCrystal.h>
+// include I2C library
+#include <Wire.h>
+#define DEBUG true
+void setup() {
+ // Open I2C bus as master
+ 
+ Serial.begin(115200);
+ Serial1.begin(115200);
+ pinMode(LED_BUILTIN, OUTPUT);
+ sendData("AT+RST\r\n", 2000, false); // reset module
+ sendData("AT+CWMODE=2\r\n", 1000, false); // configure as access point
+ sendData("AT+CIFSR\r\n", 1000, DEBUG); // get ip address
+ sendData("AT+CWSAP?\r\n", 2000, DEBUG); // get SSID info (network name) 
+ sendData("AT+CIPMUX=1\r\n", 1000, false); // configure for multiple connections
+ sendData("AT+CIPSERVER=1,80\r\n", 1000, false); // turn on server on port 80
+ Wire.begin();
+}
+
+void loop() {
+ if (Serial1.available()) {
+ if (Serial1.find("+IPD,")) {
+ delay(500);
+ int connectionId = Serial1.read() - 48; // read() function returns
+ // ASCII decimal value and 0 (the first decimal number) starts at 48
+ String webpage = "<h1>Choose action:</h1>";
+ String cipSend = "AT+CIPSEND=";
+ cipSend += connectionId;
+ cipSend += ",";
+ webpage +="<a href=\"/l0\"><button>Forwards</button></a>";
+ webpage += "<a href=\"/l1\"><button>Backwards</button></a>";
+ webpage += "<a href=\"/l2\"><button>Stop</button></a>";
+ webpage += "<a href=\"/l3\"><button>Left</button></a>";
+ webpage += "<a href=\"/l4\"><button>Right</button></a>";
+ webpage += "<a href=\"/l5\"><button>Accelerate</button></a>";
+ webpage += "<a href=\"/l6\"><button>Decelerate</button></a>";
+ webpage += "<a href=\"/l7\"><button>Signal</button></a>";
+ webpage += "<a href=\"/l8\"><button>Move Sensor</button></a>";
+ 
+ 
+ cipSend += webpage.length();
+ cipSend += "\r\n";
+ sendData(cipSend, 100, DEBUG);
+ sendData(webpage, 150, DEBUG);
+
+ String closeCommand = "AT+CIPCLOSE=";
+ closeCommand += connectionId; // append connection id
+ closeCommand += "\r\n";
+ sendData(closeCommand, 300, DEBUG);
+ }
+ }
+}
+String sendData(String command, const int timeout, boolean debug) {
+ String response = "";
+ Serial1.print(command); // send command to the esp8266
+ long int time = millis();
+ while ((time + timeout) > millis()) {
+ while (Serial1.available()) {
+ char c = Serial1.read(); // read next char
+ response += c;
+ }
+ }
+ Wire.beginTransmission(9);
+ if (response.indexOf("/l0") != -1) {
+ Wire.write(1);
+ }
+ if (response.indexOf("/l1") != -1) {
+  digitalWrite(LED_BUILTIN, HIGH);
+ Wire.write(2); 
+  }
+ if (response.indexOf("/l2") != -1) {
+  Wire.write(3);
+ }
+ if (response.indexOf("/l3") != -1) {
+  Wire.write(4);
+ }
+ if (response.indexOf("/l4") != -1) {
+
+  Wire.write(5);
+ }
+ if (response.indexOf("/l5") != -1) {
+  Wire.write(6);
+ }
+ if (response.indexOf("/l6") != -1) {
+  Wire.write(7);
+ }
+ if(response.indexOf("/l7") != -1){
+  for (int i=0; i <= 255; i++){
+  digitalWrite(LED_BUILTIN, LOW);
+  delay(500);
+  digitalWrite(LED_BUILTIN,HIGH);
+  delay(500);
+  }
+ }
+ if(response.indexOf("/l8") != -1){
+  Wire.write(8);
+ }
+Wire.endTransmission();
+ if (debug) {
+ Serial.print(response);
+ }
+ return response;
+}
+unsigned long readSensor() {
+ return millis();
+}
